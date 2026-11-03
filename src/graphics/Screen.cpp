@@ -472,23 +472,52 @@ static void drawModuleFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int
     pi.drawFrame(display, state, x, y);
 }
 
+
 static void drawJeepFieldTerminalFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-    char buffer[160];
+    char buffer[200];
 
     if (gpsStatus != nullptr && gpsStatus->getHasLock()) {
         double latitude = gpsStatus->getLatitude() * 1e-7;
         double longitude = gpsStatus->getLongitude() * 1e-7;
+
+        double headingDegrees = gpsStatus->getHeading() * 1e-5;
+
+        double speedKph = localPosition.ground_speed;
+        double speedMph = speedKph * 0.621371;
+
+        const char *headingText = "N";
+
+        if (headingDegrees >= 337.5 || headingDegrees < 22.5)
+            headingText = "N";
+        else if (headingDegrees < 67.5)
+            headingText = "NE";
+        else if (headingDegrees < 112.5)
+            headingText = "E";
+        else if (headingDegrees < 157.5)
+            headingText = "SE";
+        else if (headingDegrees < 202.5)
+            headingText = "S";
+        else if (headingDegrees < 247.5)
+            headingText = "SW";
+        else if (headingDegrees < 292.5)
+            headingText = "W";
+        else
+            headingText = "NW";
 
         snprintf(
             buffer,
             sizeof(buffer),
             "TRAILHEAD\n"
             "GPS: FIX  SAT: %lu\n"
+            "SPD: %.1f MPH\n"
+            "HDG: %.0f %s\n"
             "LAT: %.6f\n"
-            "LON: %.6f\n"
-            "v0.2",
+            "LON: %.6f",
             (unsigned long)gpsStatus->getNumSatellites(),
+            speedMph,
+            headingDegrees,
+            headingText,
             latitude,
             longitude
         );
@@ -498,9 +527,10 @@ static void drawJeepFieldTerminalFrame(OLEDDisplay *display, OLEDDisplayUiState 
             sizeof(buffer),
             "TRAILHEAD\n"
             "GPS: SEARCHING...\n"
+            "SPD: -- MPH\n"
+            "HDG: --\n"
             "LAT: --\n"
-            "LON: --\n"
-            "v0.2"
+            "LON: --"
         );
     }
 
@@ -512,6 +542,7 @@ static void drawJeepFieldTerminalFrame(OLEDDisplay *display, OLEDDisplayUiState 
         buffer
     );
 }
+
 
 #if BASEUI_HAS_GAMES
 // The games frame is a dedicated, always-present frame (unlike generic module frames it is placed
