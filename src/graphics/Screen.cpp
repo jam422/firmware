@@ -474,12 +474,42 @@ static void drawModuleFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int
 
 static void drawJeepFieldTerminalFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+    char buffer[160];
+
+    if (gpsStatus != nullptr && gpsStatus->getHasLock()) {
+        double latitude = gpsStatus->getLatitude() * 1e-7;
+        double longitude = gpsStatus->getLongitude() * 1e-7;
+
+        snprintf(
+            buffer,
+            sizeof(buffer),
+            "TRAILHEAD\n"
+            "GPS: FIX  SAT: %lu\n"
+            "LAT: %.6f\n"
+            "LON: %.6f\n"
+            "v0.2",
+            (unsigned long)gpsStatus->getNumSatellites(),
+            latitude,
+            longitude
+        );
+    } else {
+        snprintf(
+            buffer,
+            sizeof(buffer),
+            "TRAILHEAD\n"
+            "GPS: SEARCHING...\n"
+            "LAT: --\n"
+            "LON: --\n"
+            "v0.2"
+        );
+    }
+
     graphics::UIRenderer::drawFrameText(
         display,
         state,
         x,
         y,
-        "TRAILHEAD\n\nJEEP FIELD TERM\n\nv0.1"
+        buffer
     );
 }
 
