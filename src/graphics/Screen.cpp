@@ -475,18 +475,26 @@ static void drawModuleFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int
 
 static void drawJeepFieldTerminalFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-    char buffer[200];
+    char buffer[256];
 
-    if (gpsStatus != nullptr && gpsStatus->getHasLock()) {
-        double latitude = gpsStatus->getLatitude() * 1e-7;
-        double longitude = gpsStatus->getLongitude() * 1e-7;
+    // ----- GPS -----
+    bool gpsLocked = gpsStatus != nullptr && gpsStatus->getHasLock();
 
-        double headingDegrees = gpsStatus->getHeading() * 1e-5;
+    double latitude = 0.0;
+    double longitude = 0.0;
+    double speedMph = 0.0;
+    double headingDegrees = 0.0;
+
+    const char *headingText = "--";
+
+    if (gpsLocked) {
+        latitude = gpsStatus->getLatitude() * 1e-7;
+        longitude = gpsStatus->getLongitude() * 1e-7;
+
+        headingDegrees = gpsStatus->getHeading() * 1e-5;
 
         double speedKph = localPosition.ground_speed;
-        double speedMph = speedKph * 0.621371;
-
-        const char *headingText = "N";
+        speedMph = speedKph * 0.621371;
 
         if (headingDegrees >= 337.5 || headingDegrees < 22.5)
             headingText = "N";
@@ -504,20 +512,77 @@ static void drawJeepFieldTerminalFrame(OLEDDisplay *display, OLEDDisplayUiState 
             headingText = "W";
         else
             headingText = "NW";
+    }
 
+    // ----- MOST RECENTLY HEARD REMOTE NODE -----
+    meshtastic_NodeInfoLite *latestNode = nullptr;
+    uint32_t newestHeard = 0;
+
+    if (nodeDB != nullptr) {
+        const size_t nodeCount = nodeDB->getNumMeshNodes();
+        const NodeNum ourNodeNum = nodeDB->getNodeNum();
+
+        for (size_t i = 0; i < nodeCount; i++) {
+            meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
+
+            if (node == nullptr)
+                continue;
+
+            // Don't show ourselves as the remote node
+            if (node->num == ourNodeNum)
+                continue;
+
+            if (node->last_heard >= newestHeard) {
+                newestHeard = node->last_heard;
+                latestNode = node;
+            }
+        }
+    }
+
+    char nodeName[26] = "NO NODE";
+    char snrText[20] = "--";
+    char hopsText[20] = "--";
+
+    if (latestNode != nullptr) {
+
+        if (latestNode->long_name[0] != '\0') {
+            snprintf(nodeName, sizeof(nodeName), "%s", latestNode->long_name);
+        } else if (latestNode->short_name[0] != '\0') {
+            snprintf(nodeName, sizeof(nodeName), "%s", latestNode->short_name);
+        }
+
+        if (nodeInfoLiteHasSnr(latestNode)) {
+            snprintf(snrText, sizeof(snrText), "%.1f", latestNode->snr);
+        }
+
+        if (latestNode->has_hops_away) {
+            if (latestNode->hops_away == 0) {
+                snprintf(hopsText, sizeof(hopsText), "DIRECT");
+            } else {
+                snprintf(hopsText, sizeof(hopsText), "%u", latestNode->hops_away);
+            }
+        }
+    }
+
+    // ----- DISPLAY -----
+    if (gpsLocked) {
         snprintf(
             buffer,
             sizeof(buffer),
             "TRAILHEAD\n"
-            "GPS: FIX  SAT: %lu\n"
-            "SPD: %.1f MPH\n"
+            "GPS:%lu SAT  %.1f MPH\n"
             "HDG: %.0f %s\n"
-            "LAT: %.6f\n"
-            "LON: %.6f",
+            "%s\n"
+            "SNR:%s  HOPS:%s\n"
+            "%.6f\n"
+            "%.6f",
             (unsigned long)gpsStatus->getNumSatellites(),
             speedMph,
             headingDegrees,
             headingText,
+            nodeName,
+            snrText,
+            hopsText,
             latitude,
             longitude
         );
@@ -526,11 +591,15 @@ static void drawJeepFieldTerminalFrame(OLEDDisplay *display, OLEDDisplayUiState 
             buffer,
             sizeof(buffer),
             "TRAILHEAD\n"
-            "GPS: SEARCHING...\n"
-            "SPD: -- MPH\n"
-            "HDG: --\n"
+            "GPS: SEARCHING\n"
+            "SPD: --  HDG: --\n"
+            "%s\n"
+            "SNR:%s  HOPS:%s\n"
             "LAT: --\n"
-            "LON: --"
+            "LON: --",
+            nodeName,
+            snrText,
+            hopsText
         );
     }
 
@@ -542,7 +611,6 @@ static void drawJeepFieldTerminalFrame(OLEDDisplay *display, OLEDDisplayUiState 
         buffer
     );
 }
-
 
 #if BASEUI_HAS_GAMES
 // The games frame is a dedicated, always-present frame (unlike generic module frames it is placed
