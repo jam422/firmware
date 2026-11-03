@@ -542,8 +542,18 @@ static void drawJeepFieldTerminalFrame(OLEDDisplay *display, OLEDDisplayUiState 
     char nodeName[26] = "NO NODE";
     char snrText[20] = "--";
     char hopsText[20] = "--";
+    char ageText[20] = "--";
 
     if (latestNode != nullptr) {
+uint32_t ageSeconds = sinceLastSeen(latestNode);
+
+	if (ageSeconds < 60) {
+	    snprintf(ageText, sizeof(ageText), "%lus", (unsigned long)ageSeconds);
+	} else if (ageSeconds < 3600) {
+	    snprintf(ageText, sizeof(ageText), "%lum", (unsigned long)(ageSeconds / 60));
+	} else {
+	    snprintf(ageText, sizeof(ageText), "%luh", (unsigned long)(ageSeconds / 3600));
+	}
 
         if (latestNode->long_name[0] != '\0') {
             snprintf(nodeName, sizeof(nodeName), "%s", latestNode->long_name);
@@ -573,13 +583,14 @@ static void drawJeepFieldTerminalFrame(OLEDDisplay *display, OLEDDisplayUiState 
             "GPS:%lu SAT  %.1f MPH\n"
             "HDG: %.0f %s\n"
             "%s\n"
-            "SNR:%s  HOPS:%s\n"
+	    "SNR:%s H:%s AGE:%s\n"
             "%.6f\n"
             "%.6f",
             (unsigned long)gpsStatus->getNumSatellites(),
             speedMph,
             headingDegrees,
             headingText,
+	    ageText,
             nodeName,
             snrText,
             hopsText,
