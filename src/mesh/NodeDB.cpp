@@ -4056,11 +4056,14 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
         // too (so the client treats restored history as if heard over the air) but never has_rx_rssi.
         // Replay packets don't reach updateFrom() today; this check guards against a future change that
         // routes them back through this path silently recording a replayed rx_snr as a fresh measurement.
-        if (mp.transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA && mp.has_rx_rssi) {
-            info->snr = mp.rx_snr; // keep the most recent SNR we received for this node.
-            nodeInfoLiteSetBit(info, NODEINFO_BITFIELD_HAS_SNR_MASK, true);
-        }
+	if (mp.transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA && mp.has_rx_rssi) {
+	    info->snr = mp.rx_snr;
+	    nodeInfoLiteSetBit(info, NODEINFO_BITFIELD_HAS_SNR_MASK, true);
 
+	    // Cache the actual RSSI measured by this radio for the most
+	    // recently received LoRa packet from this node.
+	    nodeRssi[info->num] = mp.rx_rssi;
+	}
         // RF-origin only (a via_mqtt rebroadcast proves the gateway is in earshot, not the node); not
         // has_rx_rssi-gated, as SimRadio omits it. Live slot, so a beacon-preset hear fails to match home.
         if (mp.transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA && !mp.via_mqtt)

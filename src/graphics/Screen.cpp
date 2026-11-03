@@ -477,20 +477,17 @@ static void drawJeepFieldTerminalFrame(OLEDDisplay *display, OLEDDisplayUiState 
 {
     char buffer[256];
 
-    // ----- GPS -----
     bool gpsLocked = gpsStatus != nullptr && gpsStatus->getHasLock();
 
     double latitude = 0.0;
     double longitude = 0.0;
     double speedMph = 0.0;
     double headingDegrees = 0.0;
-
     const char *headingText = "--";
 
     if (gpsLocked) {
         latitude = gpsStatus->getLatitude() * 1e-7;
         longitude = gpsStatus->getLongitude() * 1e-7;
-
         headingDegrees = gpsStatus->getHeading() * 1e-5;
 
         double speedKph = localPosition.ground_speed;
@@ -514,67 +511,79 @@ static void drawJeepFieldTerminalFrame(OLEDDisplay *display, OLEDDisplayUiState 
             headingText = "NW";
     }
 
-    // ----- MOST RECENTLY HEARD REMOTE NODE -----
     meshtastic_NodeInfoLite *latestNode = nullptr;
-    uint32_t newestHeard = 0;
+    uint32_t latestNodeAge = SINCE_UNKNOWN;
 
     if (nodeDB != nullptr) {
         const size_t nodeCount = nodeDB->getNumMeshNodes();
         const NodeNum ourNodeNum = nodeDB->getNodeNum();
+        const uint32_t nowUptime = millis() / 1000U;
 
         for (size_t i = 0; i < nodeCount; i++) {
             meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
 
-            if (node == nullptr)
+            if (node == nullptr || node->num == ourNodeNum)
                 continue;
 
-            // Don't show ourselves as the remote node
-            if (node->num == ourNodeNum)
+            uint32_t candidateAge = SINCE_UNKNOWN;
+            uint32_t heardAtUptime = 0;
+
+            if (nodeDB->getHeardAtUptime(node->num, heardAtUptime)) {
+                candidateAge =
+                    (nowUptime >= heardAtUptime) ? nowUptime - heardAtUptime : 0;
+            } else if (node->last_heard != 0) {
+                candidateAge = sinceLastSeen(node);
+            }
+
+            if (candidateAge == SINCE_UNKNOWN)
                 continue;
 
-            if (node->last_heard >= newestHeard) {
-                newestHeard = node->last_heard;
+            if (latestNode == nullptr || candidateAge < latestNodeAge) {
                 latestNode = node;
+                latestNodeAge = candidateAge;
             }
         }
     }
 
     char nodeName[26] = "NO NODE";
+    char rssiText[20] = "--";
     char snrText[20] = "--";
     char hopsText[20] = "--";
     char ageText[20] = "--";
 
     if (latestNode != nullptr) {
-uint32_t ageSeconds = sinceLastSeen(latestNode);
-
-	if (ageSeconds < 60) {
-	    snprintf(ageText, sizeof(ageText), "%lus", (unsigned long)ageSeconds);
-	} else if (ageSeconds < 3600) {
-	    snprintf(ageText, sizeof(ageText), "%lum", (unsigned long)(ageSeconds / 60));
-	} else {
-	    snprintf(ageText, sizeof(ageText), "%luh", (unsigned long)(ageSeconds / 3600));
-	}
-
-        if (latestNode->long_name[0] != '\0') {
+        if (latestNode->long_name[0] != '\0')
             snprintf(nodeName, sizeof(nodeName), "%s", latestNode->long_name);
-        } else if (latestNode->short_name[0] != '\0') {
+        else if (latestNode->short_name[0] != '\0')
             snprintf(nodeName, sizeof(nodeName), "%s", latestNode->short_name);
-        }
 
-        if (nodeInfoLiteHasSnr(latestNode)) {
+        int32_t rssiDbm;
+        if (nodeDB->getLastRfRssi(latestNode->num, rssiDbm))
+            snprintf(rssiText, sizeof(rssiText), "%ld", (long)rssiDbm);
+
+        if (nodeInfoLiteHasSnr(latestNode))
             snprintf(snrText, sizeof(snrText), "%.1f", latestNode->snr);
-        }
 
         if (latestNode->has_hops_away) {
-            if (latestNode->hops_away == 0) {
+            if (latestNode->hops_away == 0)
                 snprintf(hopsText, sizeof(hopsText), "DIRECT");
-            } else {
+            else
                 snprintf(hopsText, sizeof(hopsText), "%u", latestNode->hops_away);
-            }
+        }
+
+        if (latestNodeAge != SINCE_UNKNOWN) {
+            if (latestNodeAge < 60)
+                snprintf(ageText, sizeof(ageText), "%lus",
+                         (unsigned long)latestNodeAge);
+            else if (latestNodeAge < 3600)
+                snprintf(ageText, sizeof(ageText), "%lum",
+                         (unsigned long)(latestNodeAge / 60));
+            else
+                snprintf(ageText, sizeof(ageText), "%luh",
+                         (unsigned long)(latestNodeAge / 3600));
         }
     }
 
-    // ----- DISPLAY -----
     if (gpsLocked) {
         snprintf(
             buffer,
@@ -583,17 +592,19 @@ uint32_t ageSeconds = sinceLastSeen(latestNode);
             "GPS:%lu SAT  %.1f MPH\n"
             "HDG: %.0f %s\n"
             "%s\n"
-	    "SNR:%s H:%s AGE:%s\n"
+            "RSSI:%s SNR:%s\n"
+            "H:%s AGE:%s\n"
             "%.6f\n"
             "%.6f",
             (unsigned long)gpsStatus->getNumSatellites(),
             speedMph,
             headingDegrees,
             headingText,
-	    ageText,
             nodeName,
+            rssiText,
             snrText,
             hopsText,
+            ageText,
             latitude,
             longitude
         );
@@ -603,24 +614,21 @@ uint32_t ageSeconds = sinceLastSeen(latestNode);
             sizeof(buffer),
             "TRAILHEAD\n"
             "GPS: SEARCHING\n"
-            "SPD: --  HDG: --\n"
+            "SPD: -- HDG: --\n"
             "%s\n"
-            "SNR:%s  HOPS:%s\n"
+            "RSSI:%s SNR:%s\n"
+            "H:%s AGE:%s\n"
             "LAT: --\n"
             "LON: --",
             nodeName,
+            rssiText,
             snrText,
-            hopsText
+            hopsText,
+            ageText
         );
     }
 
-    graphics::UIRenderer::drawFrameText(
-        display,
-        state,
-        x,
-        y,
-        buffer
-    );
+    graphics::UIRenderer::drawFrameText(display, state, x, y, buffer);
 }
 
 #if BASEUI_HAS_GAMES

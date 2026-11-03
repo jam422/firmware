@@ -328,6 +328,10 @@ class NodeDB
     std::map<NodeNum, meshtastic_StatusMessage> nodeStatus;
 #endif
 
+    // Last genuine LoRa RSSI heard from each node.
+    // RAM-only: this is intentionally not persisted to the NodeDB protobuf.
+    std::map<NodeNum, int32_t> nodeRssi;
+
     bool keyIsLowEntropy = false;
     bool hasWarned = false;
     bool licensedIdentityMigrationPending = false;
@@ -561,6 +565,22 @@ class NodeDB
     bool copyNodeTelemetry(NodeNum n, meshtastic_DeviceMetrics &out) const;
     bool copyNodeEnvironment(NodeNum n, meshtastic_EnvironmentMetrics &out) const;
     bool copyNodeStatus(NodeNum n, meshtastic_StatusMessage &out) const;
+    // Public read-only access to the RAM arrival timestamp.
+    bool getHeardAtUptime(NodeNum n, uint32_t &stamp) const
+    {
+        return getHeardAtUptimeSecs(n, stamp);
+    }
+
+    bool getLastRfRssi(NodeNum n, int32_t &out) const
+    {
+        auto it = nodeRssi.find(n);
+
+        if (it == nodeRssi.end())
+            return false;
+
+        out = it->second;
+        return true;
+    }
     std::vector<NodeNum> snapshotPositionNodeNums(NodeNum exclude) const;
     std::vector<NodeNum> snapshotTelemetryNodeNums(NodeNum exclude) const;
     std::vector<NodeNum> snapshotEnvironmentNodeNums(NodeNum exclude) const;
