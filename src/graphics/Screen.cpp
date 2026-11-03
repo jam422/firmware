@@ -472,6 +472,17 @@ static void drawModuleFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int
     pi.drawFrame(display, state, x, y);
 }
 
+static void drawJeepFieldTerminalFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    graphics::UIRenderer::drawFrameText(
+        display,
+        state,
+        x,
+        y,
+        "TRAILHEAD\n\nJEEP FIELD TERM\n\nv0.1"
+    );
+}
+
 #if BASEUI_HAS_GAMES
 // The games frame is a dedicated, always-present frame (unlike generic module frames it is placed
 // at a fixed position right after home), so it draws through its own trampoline rather than the
@@ -1446,6 +1457,7 @@ void Screen::setFrames(FrameFocus focus)
 
     fsi.positions.textMessage = numframes;
     normalFrames[numframes++] = graphics::MessageRenderer::drawTextMessageFrame;
+    normalFrames[numframes++] = drawJeepFieldTerminalFrame;
     indicatorIcons.push_back(icon_mail);
     PUSH_FRAME_TITLE("Messages");
 
